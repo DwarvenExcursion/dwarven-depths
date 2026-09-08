@@ -27,6 +27,8 @@ const C_FLOOD_HI  := Color("cf573c")
 const MOVE_DELAY := 0.11
 const FLOOD_LEAD := 6.0
 const BOMB_COST := 3
+const VOL_STEP := 0.1
+const SETTINGS_PATH := "user://settings.cfg"
 
 const STRATA := [
 	{"at": 0,   "stone": 0.10, "gem": 0.07,
@@ -51,19 +53,17 @@ var player := Vector2i(10, 2)
 var generated_to := -1
 var score := 0
 var deepest := 0
+var best := 0
 var flood_row := -8.0
 var move_cd := 0.0
 var last_dir := Vector2i(0, 1)
 var shake := 0.0
-
-
-const VOL_STEP := 0.1
-const SETTINGS_PATH := "user://settings.cfg"
 var volume := 0.7
 
 @onready var cam: Camera2D = $Camera2D
 @onready var label: Label = $UI/Score
 @onready var title: Label = $UI/Title
+@onready var best_label: Label = $UI/Best
 
 @onready var sfx_dig: AudioStreamPlayer = $SfxDig
 @onready var sfx_gem: AudioStreamPlayer = $SfxGem
@@ -72,12 +72,41 @@ var volume := 0.7
 
 
 func _ready() -> void:
-	for l in [label, title]:
+	load_settings()
+	apply_volume()
+	for l in [label, title, best_label]:
 		l.add_theme_color_override("font_color", C_TEXT)
 		l.add_theme_color_override("font_outline_color", C_BG)
 		l.add_theme_constant_override("outline_size", 4)
 	generate_to(VIEW_ROWS + 10)
 
+
+# --- Settings ----------------------------------------------------
+
+func apply_volume() -> void:
+	var bus := AudioServer.get_bus_index("Master")
+	# linear_to_db(0) is -inf, which misbehaves; mute instead.
+	AudioServer.set_bus_mute(bus, volume <= 0.001)
+	AudioServer.set_bus_volume_db(bus, linear_to_db(max(volume, 0.001)))
+
+
+func save_settings() -> void:
+	var cfg := ConfigFile.new()
+	cfg.set_value("audio", "volume", volume)
+	cfg.set_value("run", "best", best)
+	var err := cfg.save(SETTINGS_PATH)
+	if err != OK:
+		push_error("settings save failed: %d" % err)
+
+
+func load_settings() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load(SETTINGS_PATH) == OK:
+		volume = clampf(cfg.get_value("audio", "volume", 0.7), 0.0, 1.0)
+		best = cfg.get_value("run", "best", 0)
+
+
+# --- World -------------------------------------------------------
 
 func stratum(row: int) -> Dictionary:
 	var s: Dictionary = STRATA[0]
@@ -86,8 +115,6 @@ func stratum(row: int) -> Dictionary:
 			s = e
 	return s
 
-	load_settings()
-	apply_volume()
 
 func generate_to(row: int) -> void:
 	while generated_to < row:
@@ -151,6 +178,8 @@ func _draw() -> void:
 	draw_rect(Rect2(0, flood_row * TILE - 2, COLS * TILE, 2), C_FLOOD_HI)
 
 
+# --- Actions -----------------------------------------------------
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("quit_game"):
 		get_tree().quit()
@@ -203,7 +232,12 @@ func die() -> void:
 	state = State.DEAD
 	shake = 0.0
 	sfx_death.play()
+	if deepest > best:
+		best = deepest
+		save_settings()
 
+
+# --- Main loop ---------------------------------------------------
 
 func _process(delta: float) -> void:
 	match state:
@@ -213,6 +247,7 @@ func _process(delta: float) -> void:
 			var bar := "#".repeat(filled) + ".".repeat(10 - filled)
 			title.text = "DWARVEN DEPTHS\n\nARROWS dig · Z blast (3)\nESC quit\n\nVOL %s  < >\n\nPress Enter / START" % bar
 			label.text = ""
+			best_label.text = ""
 			cam.position = Vector2(COLS * TILE * 0.5, VIEW_ROWS * TILE * 0.4)
 			cam.offset = Vector2.ZERO
 
@@ -226,30 +261,26 @@ func _process(delta: float) -> void:
 			if changed:
 				apply_volume()
 				save_settings()
-				sfx_gem.play()
+				sfx_gem.play()   # doubles as a preview of the new level
 
-			if Input.is_action_just_pressed("start_game"):
-				restart()
-			return
-			title.visible = true
-			title.text = "DWARVEN DEPTHS\n\nDig deep. Don't drown.\n\nARROWS / D-PAD  dig\nZ / A  blast  (3 gems)\nESC / SELECT  quit\n\nPress Enter / START"
-			label.text = ""
-			cam.position = Vector2(COLS * TILE * 0.5, VIEW_ROWS * TILE * 0.4)
-			cam.offset = Vector2.ZERO
 			if Input.is_action_just_pressed("start_game"):
 				restart()
 			return
 
 		State.DEAD:
 			title.visible = true
-			title.text = "DEPTH %d\nGEMS %d\n\nPress Enter / START" % [deepest, score]
+			# die() updates best before this runs, so a record run compares equal.
+			var tag := "NEW BEST!" if deepest >= best else "BEST %d" % best
+			title.text = "DEPTH %d\nGEMS %d\n%s\n\nPress Enter / START" % [deepest, score, tag]
 			label.text = ""
+			best_label.text = ""
 			cam.offset = Vector2.ZERO
 			if Input.is_action_just_pressed("start_game"):
 				restart()
 			return
 
 	title.visible = false
+	best_label.text = "BEST %d" % best
 
 	move_cd -= delta
 	if move_cd <= 0.0:
@@ -294,18 +325,3 @@ func restart() -> void:
 	state = State.PLAY
 	generate_to(VIEW_ROWS + 10)
 	queue_redraw()
-
-func apply_volume() -> void:
-	var bus := AudioServer.get_bus_index("Master")
-	AudioServer.set_bus_mute(bus, volume <= 0.001)
-	AudioServer.set_bus_volume_db(bus, linear_to_db(max(volume, 0.001)))
-
-func save_settings() -> void:
-	var cfg := ConfigFile.new()
-	cfg.set_value("audio", "volume", volume)
-	cfg.save(SETTINGS_PATH)
-
-func load_settings() -> void:
-	var cfg := ConfigFile.new()
-	if cfg.load(SETTINGS_PATH) == OK:
-		volume = clampf(cfg.get_value("audio", "volume", 0.7), 0.0, 1.0)
