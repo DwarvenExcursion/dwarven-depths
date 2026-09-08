@@ -9,7 +9,6 @@ const TILE := 16
 const COLS := 20
 const VIEW_ROWS := 15
 
-
 const EMPTY := 0
 const DIRT := 1
 const STONE := 2
@@ -18,19 +17,17 @@ const GEM := 3
 # --- Apollo palette ---------------------------------------------
 const C_BG        := Color("090a14")   # darkest grey - open tunnel
 const C_PLAYER    := Color("ebede9")   # lightest grey
-const C_TEXT      := Color("a8b5b2")   # text grey - for legibility
-const C_GEM       := Color("73bed3")   # light blue
-const C_GEM_HI    := Color("a4dddb")   # pale blue
-const C_FLOOD     := Color("a53030")   # deep red
-const C_FLOOD_HI  := Color("cf573c")   # red-orange crest
+const C_TEXT      := Color("a8b5b2")   # muted, so it won't blend with the player
+const C_GEM       := Color("73bed3")
+const C_GEM_HI    := Color("a4dddb")
+const C_FLOOD     := Color("a53030")
+const C_FLOOD_HI  := Color("cf573c")
 
 # --- Tuning ------------------------------------------------------
 const MOVE_DELAY := 0.11
 const FLOOD_LEAD := 6.0
 const BOMB_COST := 3
 
-# Each band pulls dirt/rock plus their bevel shades straight from
-# an Apollo ramp, so highlights stay on-palette.
 const STRATA := [
 	{"at": 0,   "stone": 0.10, "gem": 0.07,
 		"dirt": Color("ad7757"), "dirt_hi": Color("c09473"), "dirt_lo": Color("7a4841"),
@@ -59,9 +56,19 @@ var move_cd := 0.0
 var last_dir := Vector2i(0, 1)
 var shake := 0.0
 
+
+const VOL_STEP := 0.1
+const SETTINGS_PATH := "user://settings.cfg"
+var volume := 0.7
+
 @onready var cam: Camera2D = $Camera2D
 @onready var label: Label = $UI/Score
 @onready var title: Label = $UI/Title
+
+@onready var sfx_dig: AudioStreamPlayer = $SfxDig
+@onready var sfx_gem: AudioStreamPlayer = $SfxGem
+@onready var sfx_blast: AudioStreamPlayer = $SfxBlast
+@onready var sfx_death: AudioStreamPlayer = $SfxDeath
 
 
 func _ready() -> void:
@@ -79,6 +86,8 @@ func stratum(row: int) -> Dictionary:
 			s = e
 	return s
 
+	load_settings()
+	apply_volume()
 
 func generate_to(row: int) -> void:
 	while generated_to < row:
@@ -119,6 +128,9 @@ func _draw() -> void:
 				lo = st["rock_lo"]
 
 			draw_rect(Rect2(px, py, TILE, TILE), base)
+
+			# Bevel only faces open space, so tunnels get outlined
+			# instead of the whole field turning into stripes.
 			if world.get(Vector2i(x, y - 1), DIRT) == EMPTY:
 				draw_rect(Rect2(px, py, TILE, 2), hi)
 			if world.get(Vector2i(x, y + 1), DIRT) == EMPTY:
@@ -134,7 +146,7 @@ func _draw() -> void:
 	# Player
 	draw_rect(Rect2(player.x * TILE + 3, player.y * TILE + 3, TILE - 6, TILE - 6), C_PLAYER)
 
-	# Flood, with a bright crest line so the edge reads clearly
+	# Flood, with a bright crest so the edge reads clearly
 	draw_rect(Rect2(0, -8000, COLS * TILE, flood_row * TILE + 8000), C_FLOOD)
 	draw_rect(Rect2(0, flood_row * TILE - 2, COLS * TILE, 2), C_FLOOD_HI)
 
@@ -155,9 +167,13 @@ func try_move(dir: Vector2i) -> void:
 	var t: int = world.get(target, DIRT)
 	if t == STONE:
 		return
+	if t == DIRT:
+		sfx_dig.pitch_scale = randf_range(0.9, 1.1)
+		sfx_dig.play()
 	if t == GEM:
 		score += 1
 		shake = 1.5
+		sfx_gem.play()
 	world[target] = EMPTY
 	player = target
 	deepest = max(deepest, player.y)
@@ -179,14 +195,44 @@ func blast() -> void:
 				score += 1
 			world[p] = EMPTY
 	shake = 5.0
+	sfx_blast.play()
 	queue_redraw()
+
+
+func die() -> void:
+	state = State.DEAD
+	shake = 0.0
+	sfx_death.play()
 
 
 func _process(delta: float) -> void:
 	match state:
 		State.TITLE:
 			title.visible = true
-			title.text = "DWARVEN DEPTHS\n\nDig deep. Don't drown.\n\nARROWS / D-PAD  dig\nZ / A  blast  (3 gems)\nESC / SELECT  quit\n\nPress START / Enter"
+			var filled := int(round(volume * 10.0))
+			var bar := "#".repeat(filled) + ".".repeat(10 - filled)
+			title.text = "DWARVEN DEPTHS\n\nARROWS dig · Z blast (3)\nESC quit\n\nVOL %s  < >\n\nPress Enter / START" % bar
+			label.text = ""
+			cam.position = Vector2(COLS * TILE * 0.5, VIEW_ROWS * TILE * 0.4)
+			cam.offset = Vector2.ZERO
+
+			var changed := false
+			if Input.is_action_just_pressed("move_left"):
+				volume = maxf(0.0, volume - VOL_STEP)
+				changed = true
+			elif Input.is_action_just_pressed("move_right"):
+				volume = minf(1.0, volume + VOL_STEP)
+				changed = true
+			if changed:
+				apply_volume()
+				save_settings()
+				sfx_gem.play()
+
+			if Input.is_action_just_pressed("start_game"):
+				restart()
+			return
+			title.visible = true
+			title.text = "DWARVEN DEPTHS\n\nDig deep. Don't drown.\n\nARROWS / D-PAD  dig\nZ / A  blast  (3 gems)\nESC / SELECT  quit\n\nPress Enter / START"
 			label.text = ""
 			cam.position = Vector2(COLS * TILE * 0.5, VIEW_ROWS * TILE * 0.4)
 			cam.offset = Vector2.ZERO
@@ -196,7 +242,7 @@ func _process(delta: float) -> void:
 
 		State.DEAD:
 			title.visible = true
-			title.text = "DEPTH %d\nGEMS %d\n\nPress START / Enter" % [deepest, score]
+			title.text = "DEPTH %d\nGEMS %d\n\nPress Enter / START" % [deepest, score]
 			label.text = ""
 			cam.offset = Vector2.ZERO
 			if Input.is_action_just_pressed("start_game"):
@@ -220,7 +266,8 @@ func _process(delta: float) -> void:
 	flood_row = max(flood_row, float(deepest) - FLOOD_LEAD)
 
 	if float(player.y) <= flood_row:
-		state = State.DEAD
+		die()
+		return
 
 	queue_redraw()
 
@@ -247,3 +294,18 @@ func restart() -> void:
 	state = State.PLAY
 	generate_to(VIEW_ROWS + 10)
 	queue_redraw()
+
+func apply_volume() -> void:
+	var bus := AudioServer.get_bus_index("Master")
+	AudioServer.set_bus_mute(bus, volume <= 0.001)
+	AudioServer.set_bus_volume_db(bus, linear_to_db(max(volume, 0.001)))
+
+func save_settings() -> void:
+	var cfg := ConfigFile.new()
+	cfg.set_value("audio", "volume", volume)
+	cfg.save(SETTINGS_PATH)
+
+func load_settings() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load(SETTINGS_PATH) == OK:
+		volume = clampf(cfg.get_value("audio", "volume", 0.7), 0.0, 1.0)
