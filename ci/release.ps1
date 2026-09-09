@@ -25,7 +25,8 @@
 #>
 param(
     [Parameter(Mandatory = $true)][string]$Version,
-    [switch]$Mandatory
+    [switch]$Mandatory,
+    [switch]$Force
 )
 
 $ErrorActionPreference = "Stop"
@@ -90,15 +91,54 @@ if ($projectVersion -ne $Version) {
 
 if (-not (Test-Path $notesFile)) { throw "NOTES.md not found - write the patch notes first." }
 
-# ONLY lines that are actual markdown bullets. Anything else in the file --
-# headings, instructions to yourself, a paragraph explaining the format -- is
-# ignored, so the file can carry its own usage notes without them shipping to
-# players as patch notes.
-$notes = @(Get-Content $notesFile |
-    ForEach-Object { $_.Trim() } |
-    Where-Object { $_ -match '^[-*+]\s+\S' } |
-    ForEach-Object { $_ -replace '^[-*+]\s+', '' })
+# A note starts at a markdown bullet and continues through any indented
+# lines under it, joined into one sentence. Everything else -- headings, and
+# the paragraph at the top explaining the format -- is ignored, so the file
+# can document itself without that shipping to players as patch notes.
+#
+# The continuation handling matters: 0.1.1 went out with both of its notes
+# truncated at the line break, because an earlier version of this took only
+# lines beginning with a dash and silently dropped the wrapped remainder.
+$notes = @()
+$current = $null
+foreach ($raw in Get-Content $notesFile) {
+    $line = $raw.TrimEnd()
+
+    if ($line -match '^\s*[-*+]\s+(\S.*)$') {
+        if ($current) { $notes += $current }
+        $current = $Matches[1].Trim()
+    }
+    elseif ($current -and $line -match '^\s+\S') {
+        $current = "$current " + $line.Trim()
+    }
+    elseif ($current) {
+        $notes += $current
+        $current = $null
+    }
+}
+if ($current) { $notes += $current }
+
 if ($notes.Count -eq 0) { throw "NOTES.md has no bullet lines (- like this)." }
+
+# Re-running for a version that already has a manifest is nearly always a
+# mistake. Inno stamps every build, so the rebuilt installer is a DIFFERENT
+# file with a different SHA-256 -- and rewriting the manifest to describe it
+# leaves every installed copy rejecting the download that is actually
+# published. This happened once with 0.1.1 and was caught by hand.
+if ((Test-Path $manifest) -and -not $Force) {
+    $existing = Get-Content $manifest -Raw | ConvertFrom-Json
+    if ($existing.latest.version -eq $Version) {
+        throw @"
+$Version already has a manifest describing a published build.
+
+Rebuilding is not reproducible: Inno Setup stamps each build, so the new
+installer has a different SHA-256. Overwriting the manifest with it would
+make every installed copy reject the update that is actually on GitHub.
+
+Bump the version, or pass -Force if this release was never published.
+"@
+    }
+}
 
 # --- build -----------------------------------------------------------
 
