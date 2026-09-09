@@ -48,6 +48,31 @@ if (-not (Test-Path $exportExe)) {
     throw "No Windows export at $exportExe. Export from Godot first."
 }
 
+# Refuse to ship an export older than the code. This has bitten once already:
+# the export preset wrote to a differently-named file, so the installer kept
+# packaging a two-day-old build and shipped it as a new release. Nothing else
+# in the pipeline can catch that -- the installer, the hash and the manifest
+# are all perfectly consistent with the wrong game.
+$exportTime = (Get-Item $exportExe).LastWriteTime
+$newestSource = Get-ChildItem (Join-Path $repo "dwarven-depths") -Recurse -File `
+        -Include *.gd, *.tscn, *.godot, *.cfg -ErrorAction SilentlyContinue |
+    Where-Object { $_.FullName -notmatch '\\\.godot\\' } |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1
+
+if ($newestSource -and $newestSource.LastWriteTime -gt $exportTime) {
+    throw @"
+The export is older than the source.
+
+  export : $($exportTime.ToString('yyyy-MM-dd HH:mm'))  $exportExe
+  source : $($newestSource.LastWriteTime.ToString('yyyy-MM-dd HH:mm'))  $($newestSource.Name)
+
+Re-export from Godot before releasing. Check that the Windows preset's
+export_path is ../../GameExports/DwarvenDepths.exe -- if it writes to any
+other filename, this script packages a stale build without noticing.
+"@
+}
+
 $projectGodot = Get-Content (Join-Path $repo "dwarven-depths\project.godot") -Raw
 if ($projectGodot -notmatch '(?m)^config/version="(.+)"$') {
     throw "project.godot has no config/version. Set it under Application > Config."

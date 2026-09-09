@@ -4,24 +4,31 @@
     "title":  "Dwarven Depths",
     "page":  "https://dwarvenengineering.com/dwarven-depths",
     "latest":  {
-                   "version":  "0.1.0",
+                   "version":  "0.1.1",
                    "released":  "2026-09-09",
                    "mandatory":  false,
                    "notes":  [
-                                 "First public build.",
-                                 "Dig down, grab gems, outrun the water.",
-                                 "The game now checks for its own updates on launch."
+                                 "The 0.1.0 download was built from a stale export and shipped without the",
+                                 "The game checks for its own updates on launch, and can install them itself"
                              ],
                    "builds":  {
                                   "windows":  {
-                                                  "url":  "https://github.com/DwarvenExcursion/dwarven-depths/releases/download/v0.1.0/DwarvenDepths-0.1.0-setup.exe",
-                                                  "size":  25599841,
-                                                  "sha256":  "bee2896372a20a9421b96b6d3cd187c47e0b3ef7b35439fb7c899578ea78157f",
+                                                  "url":  "https://github.com/DwarvenExcursion/dwarven-depths/releases/download/v0.1.1/DwarvenDepths0.1.1setup.exe",
+                                                  "size":  28215896,
+                                                  "sha256":  "248ed605220124d98d582abe3659eceaba60a2f63a988356bdcce2520a872ef4",
                                                   "installerArgs":  "/SILENT /NORESTART /CLOSEAPPLICATIONS"
                                               }
                               }
                },
     "history":  [
-
+                    {
+                        "version":  "0.1.0",
+                        "released":  "2026-09-09",
+                        "notes":  [
+                                      "First public build.",
+                                      "Dig down, grab gems, outrun the water.",
+                                      "The game now checks for its own updates on launch."
+                                  ]
+                    }
                 ]
 }
