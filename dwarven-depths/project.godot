@@ -11,9 +11,15 @@ config_version=5
 [application]
 
 config/name="Dwarven Depths"
+config/version="0.1.0"
 run/main_scene="uid://dmgdatad3pe7a"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
+
+[autoload]
+
+UpdateChecker="*res://scripts/update_checker.gd"
+UpdatePanel="*res://scripts/update_panel.gd"
 
 [display]
 

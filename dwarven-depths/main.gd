@@ -59,6 +59,12 @@ func _ready() -> void:
 	band = Apollo.stratum(0)["name"]
 	push_hud()
 
+	# Ask the hold whether a newer build exists. The request is non-blocking
+	# and times out on its own, so a player with no connection never waits and
+	# never sees anything -- the panel only appears if there is news.
+	UpdateChecker.update_available.connect(UpdatePanel.show_update)
+	UpdateChecker.check_for_update()
+
 
 # --- Resolution ---------------------------------------------------
 #
