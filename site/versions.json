@@ -1,0 +1,27 @@
+{
+    "schema":  1,
+    "game":  "dwarven-depths",
+    "title":  "Dwarven Depths",
+    "page":  "https://dwarvenengineering.com/dwarven-depths",
+    "latest":  {
+                   "version":  "0.1.0",
+                   "released":  "2026-09-09",
+                   "mandatory":  false,
+                   "notes":  [
+                                 "First public build.",
+                                 "Dig down, grab gems, outrun the water.",
+                                 "The game now checks for its own updates on launch."
+                             ],
+                   "builds":  {
+                                  "windows":  {
+                                                  "url":  "https://github.com/DwarvenExcursion/dwarven-depths/releases/download/v0.1.0/DwarvenDepths-0.1.0-setup.exe",
+                                                  "size":  25599841,
+                                                  "sha256":  "bee2896372a20a9421b96b6d3cd187c47e0b3ef7b35439fb7c899578ea78157f",
+                                                  "installerArgs":  "/SILENT /NORESTART /CLOSEAPPLICATIONS"
+                                              }
+                              }
+               },
+    "history":  [
+
+                ]
+}

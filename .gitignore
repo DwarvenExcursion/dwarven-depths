@@ -1,0 +1,3 @@
+# Built installers. Regenerate with ci/release.ps1; the shipped copy lives on
+# the GitHub Release, not in git.
+/dist/

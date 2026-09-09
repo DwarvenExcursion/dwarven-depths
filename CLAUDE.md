@@ -10,6 +10,11 @@ the water. Windows desktop now; Anbernic H700 handheld via PortMaster later.
   linked with `[[wikilinks]]`. Start at `docs/Dwarven Depths.md`.
 - `pallette/apollo.hex` — the Apollo 46 palette
 - `../GameExports/` — build output
+- `site/` — the game's public page and `versions.json`, published to
+  dwarvenengineering.com/dwarven-depths. **Not `docs/`** — that is the vault.
+- `installer/` — Inno Setup script for the Windows installer
+- `ci/release.ps1` — cuts a release; see Releasing below
+- `NOTES.md` — patch notes for the next release, one bullet per line
 
 ## Read before changing things
 
@@ -35,7 +40,30 @@ godot --path .                                          # run the game
 godot --headless --path . --quit-after 300              # compile + boot check
 godot --headless --path . --script res://tools/floodsim.gd   # flood tuning
 godot --path . --script res://tools/capture.gd               # screenshots
+godot --path . --script res://tools/updateshot.gd            # update panel shots
 ```
+
+## Releasing
+
+The version lives in exactly one place: `config/version` in `project.godot`.
+The game reports it, the release script checks it, and they must agree.
+
+1. Bump `config/version`. **Close the editor first** (see Traps).
+2. Export the Windows build from Godot to `../GameExports/`.
+3. Write the bullets in `NOTES.md`.
+4. `pwsh ci\release.ps1 -Version 0.2.0`
+
+That builds the installer, hashes it, and rewrites `site/versions.json`. It
+prints the two steps that need your GitHub account: create the release and
+upload the exe, *then* push the manifest.
+
+**Order matters.** `versions.json` is what tells every installed copy an update
+exists. Push it before the release exists and every player gets a download
+button pointing at a 404.
+
+The same installer does first-time installs and silent in-place upgrades —
+that is what lets the game update itself. `AppId` in the `.iss` must never
+change, or upgrades stop replacing the old install.
 
 ## Conventions
 

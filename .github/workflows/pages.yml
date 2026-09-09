@@ -1,0 +1,44 @@
+name: Publish game page
+
+# Publishes site/ to GitHub Pages, which serves it at
+# https://dwarvenengineering.com/dwarven-depths/ -- project repos inherit the
+# custom domain set on DwarvenExcursion.github.io.
+#
+# Deliberately NOT "deploy from a branch": the obvious branch folder would be
+# docs/, and docs/ here is an Obsidian vault, not a website. Publishing it
+# would put the design notes online.
+#
+# Nothing in site/ may contain a CNAME file. The domain is claimed once, by
+# the user site; a second CNAME fights it.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4
