@@ -1,0 +1,36 @@
+[gd_scene format=3 uid="uid://dmgdatad3pe7a"]
+
+[ext_resource type="Script" uid="uid://qrst1thghyeo" path="res://main.gd" id="1_ig7tw"]
+[ext_resource type="AudioStream" uid="uid://b1rj6qhytn0ua" path="res://sounds/dig.wav" id="2_lquwl"]
+[ext_resource type="AudioStream" uid="uid://cxubyhvsn6wag" path="res://sounds/gem.wav" id="3_7mycd"]
+[ext_resource type="AudioStream" uid="uid://ilieo72rvfri" path="res://sounds/blast.wav" id="4_272bh"]
+[ext_resource type="AudioStream" uid="uid://citb4w4pmxlva" path="res://sounds/death.wav" id="5_5vw27"]
+[ext_resource type="Script" path="res://scripts/hud.gd" id="6_hud"]
+
+[node name="Main" type="Node2D"]
+script = ExtResource("1_ig7tw")
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="Hud" type="Control" parent="UI"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("6_hud")
+
+[node name="Camera2D" type="Camera2D" parent="."]
+
+[node name="SfxDig" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("2_lquwl")
+
+[node name="SfxGem" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("3_7mycd")
+
+[node name="SfxBlast" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("4_272bh")
+
+[node name="SfxDeath" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("5_5vw27")
