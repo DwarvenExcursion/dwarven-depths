@@ -112,13 +112,13 @@ footer{margin-top:3.5rem;padding-top:1.5rem;border-top:1px solid var(--slate-d);
         <h2>Download</h2>
         <p class="meta" id="meta">Reading the tablets…</p>
       </div>
-      <a class="btn" id="dl" aria-disabled="true" href="#">Windows</a>
+      <div class="row" id="builds" style="gap:.6rem"></div>
     </div>
     <ul class="notes" id="notes"></ul>
   </section>
 
   <section class="slab">
-    <h2>Installing</h2>
+    <h2>Installing on Windows</h2>
     <ol class="steps">
       <li>Run the installer you downloaded above.</li>
       <li>
@@ -127,6 +127,30 @@ footer{margin-top:3.5rem;padding-top:1.5rem;border-top:1px solid var(--slate-d);
         warning. Click <strong>More info</strong>, then <strong>Run anyway</strong>.
       </li>
       <li>Launch from the Start Menu. The game checks for updates itself from then on.</li>
+    </ol>
+  </section>
+
+  <section class="slab">
+    <h2>Installing on Linux</h2>
+    <ol class="steps">
+      <li>
+        Unpack it:
+        <code>tar -xzf DwarvenDepths-*-linux-x86_64.tar.gz</code>
+      </li>
+      <li>
+        Mark it executable:
+        <code>chmod +x DwarvenDepths.x86_64</code>
+        <br>
+        This is needed because the archive is built on Windows, which cannot
+        record the executable bit.
+      </li>
+      <li>Run it: <code>./DwarvenDepths.x86_64</code></li>
+      <li>
+        The game tells you when an update exists but will not install it for
+        you here — it shows the address and you download the new archive.
+        Replacing files under a running program is only safe on Windows,
+        where the installer can close the game first.
+      </li>
     </ol>
   </section>
 
@@ -146,18 +170,32 @@ fetch("versions.json", { cache: "no-cache" })
     const latest = m.latest;
     const win = latest.builds && latest.builds.windows;
 
-    const mb = win && win.size ? (win.size / 1048576).toFixed(1) + " MB" : null;
     document.getElementById("meta").innerHTML =
       "Latest <strong>v" + latest.version + "</strong>" +
-      (latest.released ? " · " + latest.released : "") +
-      (mb ? " · " + mb : "");
+      (latest.released ? " · " + latest.released : "");
 
-    const dl = document.getElementById("dl");
-    if (win && win.url) {
-      dl.href = win.url;
-      dl.removeAttribute("aria-disabled");
+    // One button per platform the release actually shipped, rather than
+    // assuming Windows. A friend on Linux should not have to ask.
+    const LABEL = {
+      windows: "Windows",
+      linux: "Linux x86_64",
+      "linux-arm64": "Linux ARM64",
+      macos: "macOS",
+    };
+    const builds = document.getElementById("builds");
+    const entries = Object.entries(latest.builds || {});
+
+    if (entries.length === 0) {
+      builds.innerHTML = '<span class="btn" aria-disabled="true">Not yet available</span>';
     } else {
-      dl.textContent = "Not yet available";
+      entries.forEach(([platform, b]) => {
+        const a = document.createElement("a");
+        a.className = "btn";
+        a.href = b.url;
+        const mb = b.size ? " · " + (b.size / 1048576).toFixed(1) + " MB" : "";
+        a.textContent = (LABEL[platform] || platform) + mb;
+        builds.appendChild(a);
+      });
     }
 
     const notes = document.getElementById("notes");

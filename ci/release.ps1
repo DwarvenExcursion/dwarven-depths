@@ -37,6 +37,11 @@ $notesFile = Join-Path $repo "NOTES.md"
 $exportExe = Join-Path (Split-Path -Parent $repo) "GameExports\DwarvenDepths.exe"
 $outExe    = Join-Path $repo "dist\DwarvenDepths-$Version-setup.exe"
 
+# Linux is optional: a Windows-only release is still a valid release, so a
+# missing Linux export is skipped rather than fatal.
+$exportLinux = Join-Path (Split-Path -Parent $repo) "GameExports\DwarvenDepths.x86_64"
+$outLinux    = Join-Path $repo "dist\DwarvenDepths-$Version-linux-x86_64.tar.gz"
+
 # Inno installs per-user by default; fall back to the machine-wide path.
 $iscc = "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
 if (-not (Test-Path $iscc)) { $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
@@ -105,6 +110,28 @@ if (-not (Test-Path $outExe)) { throw "Expected $outExe but it is not there." }
 $size = (Get-Item $outExe).Length
 $sha  = (Get-FileHash $outExe -Algorithm SHA256).Hash.ToLower()
 
+# --- linux (optional) ------------------------------------------------
+
+$haveLinux = Test-Path $exportLinux
+if ($haveLinux) {
+    if ($newestSource -and $newestSource.LastWriteTime -gt (Get-Item $exportLinux).LastWriteTime) {
+        throw "The Linux export is older than the source. Re-export it, or delete " +
+              "$exportLinux to cut a Windows-only release."
+    }
+
+    Write-Host "Packaging Linux build..." -ForegroundColor Cyan
+    # tar.gz rather than zip: it is what a Linux user expects, and it is one
+    # file. Note that an archive built on NTFS cannot carry the executable
+    # bit, so the install guide tells them to chmod +x.
+    tar -czf $outLinux -C (Split-Path -Parent $exportLinux) (Split-Path -Leaf $exportLinux)
+    if ($LASTEXITCODE -ne 0) { throw "tar failed with $LASTEXITCODE." }
+
+    $sizeLinux = (Get-Item $outLinux).Length
+    $shaLinux  = (Get-FileHash $outLinux -Algorithm SHA256).Hash.ToLower()
+} else {
+    Write-Host "No Linux export found - cutting a Windows-only release." -ForegroundColor DarkYellow
+}
+
 # --- manifest --------------------------------------------------------
 
 $repoSlug = "DwarvenExcursion/dwarven-depths"
@@ -122,6 +149,25 @@ if ($previous) {
         Select-Object -First 25)
 }
 
+# Only Windows carries installerArgs -- it is the only platform that installs
+# itself. The Linux entry is a plain archive the player unpacks, so the game
+# shows the address instead of a download button there.
+$builds = [ordered]@{
+    windows = [ordered]@{
+        url           = "https://github.com/$repoSlug/releases/download/v$Version/$(Split-Path $outExe -Leaf)"
+        size          = $size
+        sha256        = $sha
+        installerArgs = "/SILENT /NORESTART /CLOSEAPPLICATIONS"
+    }
+}
+if ($haveLinux) {
+    $builds["linux"] = [ordered]@{
+        url    = "https://github.com/$repoSlug/releases/download/v$Version/$(Split-Path $outLinux -Leaf)"
+        size   = $sizeLinux
+        sha256 = $shaLinux
+    }
+}
+
 $doc = [ordered]@{
     schema  = 1
     game    = "dwarven-depths"
@@ -132,14 +178,7 @@ $doc = [ordered]@{
         released  = (Get-Date -Format "yyyy-MM-dd")
         mandatory = [bool]$Mandatory
         notes     = $notes
-        builds    = [ordered]@{
-            windows = [ordered]@{
-                url           = "https://github.com/$repoSlug/releases/download/v$Version/$(Split-Path $outExe -Leaf)"
-                size          = $size
-                sha256        = $sha
-                installerArgs = "/SILENT /NORESTART /CLOSEAPPLICATIONS"
-            }
-        }
+        builds    = $builds
     }
     history = $history
 }
@@ -154,10 +193,14 @@ $json = $doc | ConvertTo-Json -Depth 8
 Write-Host ""
 Write-Host "Built  $outExe" -ForegroundColor Green
 Write-Host ("       {0:N1} MB   sha256 {1}" -f ($size / 1MB), $sha.Substring(0, 16))
+if ($haveLinux) {
+    Write-Host "Built  $outLinux" -ForegroundColor Green
+    Write-Host ("       {0:N1} MB   sha256 {1}" -f ($sizeLinux / 1MB), $shaLinux.Substring(0, 16))
+}
 Write-Host "Wrote  $manifest" -ForegroundColor Green
 Write-Host ""
 Write-Host "Still to do, in this order:" -ForegroundColor Yellow
-Write-Host "  1. Create release v$Version on GitHub and upload that .exe."
+Write-Host "  1. Create release v$Version on GitHub and upload everything in dist\."
 Write-Host "     https://github.com/$repoSlug/releases/new?tag=v$Version"
 Write-Host "  2. Commit and push site/versions.json."
 Write-Host ""
