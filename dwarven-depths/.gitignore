@@ -1,0 +1,9 @@
+# Godot 4+ specific ignores
+.godot/
+/android/
+
+# Editor scratch files
+*.tmp
+
+# Output of tools/capture.gd -- regenerate, do not commit
+/shots/
