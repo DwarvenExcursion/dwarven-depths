@@ -45,11 +45,17 @@ const STUN_FREE    := 3        # rows you may drop before any stun at all
 const STUN_PER_ROW := 0.022
 const STUN_MAX     := 0.45
 
+## Not a class_name: a new global class needs an editor pass to register, and
+## that pass hangs on this project. Preload sidesteps the cache entirely.
+const Entities := preload("res://scripts/entities.gd")
+
 enum State { TITLE, PLAY, DEAD, PAUSE }
 
 var state := State.TITLE
+
 var mine := Mine.new()
 var flood := Flood.new()
+var entities := Entities.new()
 
 var player := Vector2i(10, 2)
 var gems := 0
@@ -254,12 +260,48 @@ func _draw() -> void:
 				draw_rect(Rect2(px + 4, py + 4, TILE - 8, TILE - 8), Apollo.GEM)
 				draw_rect(Rect2(px + 5, py + 5, 3, 3), Apollo.GEM_HI)
 
+	# Goblins under the debris but over the tiles, so a dig that clears one
+	# still throws its dirt in front.
+	for e in entities.list:
+		var ep: Vector2i = e["p"]
+		if ep.y >= y0 and ep.y < y1:
+			_draw_goblin(ep.x * TILE, ep.y * TILE, e)
+
 	for b in bits:
 		draw_rect(Rect2(b["p"].x, b["p"].y, 2, 2), b["c"])
 
 	var sub: float = clampf(flood.at(player) / Flood.DROWN, 0.0, 1.0)
 	Dwarf.draw_at(self, Vector2(player.x * TILE, player.y * TILE),
 		facing, swing > 0.0, sub)
+
+
+## Goblin: green, hunched, and facing the way it walks. Drawn from rects like
+## everything else. It reads at 16px mainly by silhouette -- ears out, head
+## low -- because at this size colour alone does not separate it from moss.
+func _draw_goblin(px: int, py: int, e: Dictionary) -> void:
+	var dir: int = e["dir"]
+	# A slow bob so a stationary goblin is still obviously alive.
+	var bob: int = 1 if sin(Time.get_ticks_msec() * 0.004 + e["bob"]) > 0.0 else 0
+	var y: int = py + bob
+
+	# A goblin only ever stands in an open tile, so its background is VOID and
+	# the green reads against every band. The exception is water: an open tile
+	# with any flow in it is drawn blue-to-red, and a green figure on that is
+	# mud. This backing plate keeps the silhouette clean when one is wading,
+	# and costs nothing when it is not.
+	draw_rect(Rect2(px + 1, y + 2, 14, 14), Apollo.VOID)
+
+	draw_rect(Rect2(px + 4, y + 8, 8, 6), Apollo.MOSS_D)        # body
+	draw_rect(Rect2(px + 5, y + 3, 6, 6), Apollo.MOSS)          # head
+	draw_rect(Rect2(px + 2, y + 3, 3, 2), Apollo.MOSS)          # ears
+	draw_rect(Rect2(px + 11, y + 3, 3, 2), Apollo.MOSS)
+	draw_rect(Rect2(px + 5, y + 14, 2, 2), Apollo.BARK_XD)      # feet
+	draw_rect(Rect2(px + 9, y + 14, 2, 2), Apollo.BARK_XD)
+
+	# Eyes lead the walk direction, which is the only tell for where it will
+	# step next -- and the only warning before it takes a gem.
+	var ex: int = px + (8 if dir > 0 else 5)
+	draw_rect(Rect2(ex, y + 5, 2, 2), Apollo.AMBER)
 
 
 ## Fills the space outside the shaft on wide screens. Same rock as the current
@@ -338,6 +380,17 @@ func try_move(dir: Vector2i) -> void:
 	if dir.x != 0:
 		facing = dir.x
 	mine.generate_to(target.y + VIEW_ROWS + Flood.WINDOW_DOWN)
+
+	# A goblin costs one swing and stops you there. Digging it out is always
+	# available, which is what keeps it an obstacle rather than an ambush.
+	if entities.clear_at(target):
+		swing = SWING_TIME
+		shake = maxf(shake, 1.5)
+		spawn_bits(target, Apollo.MOSS, 5)
+		sfx_dig.pitch_scale = randf_range(0.7, 0.85)
+		sfx_dig.play()
+		queue_redraw()
+		return
 
 	var t: int = mine.at(target)
 	if t == Mine.STONE:
@@ -527,6 +580,17 @@ func _process(delta: float) -> void:
 
 	swing = maxf(0.0, swing - delta)
 	flood.step(mine, player.y, delta)
+
+	# Order is fixed: the player has already moved above, entities move now,
+	# and overlaps resolve inside step(). See scripts/entities.gd.
+	entities.spawn_ahead(mine, player.y + VIEW_ROWS + Flood.WINDOW_DOWN)
+	var stolen := entities.step(mine, flood, player, player.y - VIEW_ROWS, delta)
+	if stolen > 0 and gems > 0:
+		gems = maxi(0, gems - stolen)
+		shake = maxf(shake, 3.0)
+		hud.announce("ROBBED!")
+		sfx_gem.pitch_scale = 0.6
+		sfx_gem.play()
 	_step_bits(delta)
 
 	if flood.is_lethal(player):
@@ -654,6 +718,7 @@ func push_hud() -> void:
 func restart() -> void:
 	mine.reset()
 	flood.reset()
+	entities.reset()
 	bits.clear()
 	player = Vector2i(10, 2)
 	gems = 0
