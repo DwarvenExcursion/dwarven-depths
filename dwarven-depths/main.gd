@@ -20,7 +20,13 @@ const SETTINGS_PATH := "user://settings.cfg"
 const SWING_TIME := 0.09       # how long the dig animation frame holds
 const DANGER_ROWS := 9.0       # distance at which the HUD starts warning
 
-const MUSIC_PATH := "res://audio/music/theme.ogg"
+## Drop a track at any of these and it plays. Several extensions because the
+## point is that supplying music is one file copy, not a conversion step.
+const MUSIC_PATHS := [
+	"res://audio/music/theme.ogg",
+	"res://audio/music/theme.mp3",
+	"res://audio/music/theme.wav",
+]
 
 # --- Falling ------------------------------------------------------
 #
@@ -152,16 +158,27 @@ func _bump_volume(d: float) -> void:
 ## not: nothing here generates or ships audio of unclear provenance. A missing
 ## file has to be silent and uneventful, not an error every frame.
 func _start_music() -> void:
-	if not ResourceLoader.exists(MUSIC_PATH):
+	for path in MUSIC_PATHS:
+		if not ResourceLoader.exists(path):
+			continue
+		var stream: Resource = load(path)
+		if stream == null or not (stream is AudioStream):
+			push_warning("music at %s is not an AudioStream" % path)
+			continue
+		# Only some stream types expose `loop`; setting it blind would throw.
+		# WAV uses a loop *mode* enum rather than a bool.
+		if stream is AudioStreamWAV:
+			stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
+		elif "loop" in stream:
+			stream.set("loop", true)
+		music.stream = stream
+		music.play()
+		print_verbose("music: playing %s" % path)
 		return
-	var stream := load(MUSIC_PATH)
-	if stream == null or not (stream is AudioStream):
-		return
-	# Only some stream types expose `loop`; setting it blind would throw.
-	if "loop" in stream:
-		stream.set("loop", true)
-	music.stream = stream
-	music.play()
+
+	# No track supplied. Silent and uneventful is the correct outcome -- this
+	# is not an error, and it must not spam the console every launch.
+	print_verbose("music: no track found, running silent")
 
 
 func save_settings() -> void:

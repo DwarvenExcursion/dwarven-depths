@@ -1,0 +1,2 @@
+# Drop a looping track here as theme.ogg (or .mp3 / .wav).
+# main.gd MUSIC_PATHS checks all three; the game runs silent without one.
