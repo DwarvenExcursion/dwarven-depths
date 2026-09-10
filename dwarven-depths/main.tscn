@@ -26,12 +26,19 @@ script = ExtResource("6_hud")
 
 [node name="SfxDig" type="AudioStreamPlayer" parent="." unique_id=1225946711]
 stream = ExtResource("2_lquwl")
+bus = &"SFX"
 
 [node name="SfxGem" type="AudioStreamPlayer" parent="." unique_id=604623856]
 stream = ExtResource("3_7mycd")
+bus = &"SFX"
 
 [node name="SfxBlast" type="AudioStreamPlayer" parent="." unique_id=1726478223]
 stream = ExtResource("4_272bh")
+bus = &"SFX"
 
 [node name="SfxDeath" type="AudioStreamPlayer" parent="." unique_id=1903602230]
 stream = ExtResource("5_5vw27")
+bus = &"SFX"
+
+[node name="Music" type="AudioStreamPlayer" parent="." unique_id=1903602231]
+bus = &"Music"

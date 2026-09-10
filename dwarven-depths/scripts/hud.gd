@@ -8,7 +8,7 @@ extends Control
 ## Main pushes state into the public vars below and calls queue_redraw().
 ## The HUD never reaches back into the game.
 
-enum Mode { TITLE, PLAY, DEAD }
+enum Mode { TITLE, PLAY, DEAD, PAUSE }
 
 const PAD := 5.0
 const BAR_H := 15.0
@@ -18,7 +18,10 @@ var depth := 0
 var best := 0
 var gems := 0
 var bomb_cost := 3
-var volume := 0.7
+var vol_sfx := 0.7
+var vol_music := 0.7
+var vol_sel := 0         # which volume line the title screen has selected
+var pause_sel := 0       # which pause-menu entry is selected
 var stratum_name := "SURFACE"
 var danger := 0.0        # 0..1, how close the water is
 var new_best := false
@@ -59,6 +62,8 @@ func _draw() -> void:
 			_draw_banner(w)
 		Mode.TITLE:
 			_draw_title(w, h)
+		Mode.PAUSE:
+			_draw_pause(w, h)
 		Mode.DEAD:
 			_draw_dead(w, h)
 
@@ -149,7 +154,7 @@ func _panel(w: float, h: float, pw: float, ph: float) -> Vector2:
 
 
 func _draw_title(w: float, h: float) -> void:
-	var o := _panel(w, h, 190.0, 130.0)
+	var o := _panel(w, h, 190.0, 138.0)   # +8 for the second volume line
 	var cx := w * 0.5
 	var y := o.y + 10.0
 
@@ -163,10 +168,12 @@ func _draw_title(w: float, h: float) -> void:
 	TinyFont.draw_centered(self, cx, y, "ARROWS DIG   [Z] BLAST   ESC QUIT",
 		Apollo.SLATE_L, Color(Apollo.VOID, 0.0), 1)
 
-	y += 15.0
-	_volume_row(cx, y)
+	y += 14.0
+	_volume_row(cx, y, "SFX", vol_sfx, vol_sel == 0)
+	y += 9.0
+	_volume_row(cx, y, "MUSIC", vol_music, vol_sel == 1)
 
-	y += 18.0
+	y += 15.0
 	var blink: float = 0.55 + 0.45 * sin(_t * 4.0)
 	TinyFont.draw_centered(self, cx, y, "PRESS ENTER / START",
 		Color(Apollo.WHITE, blink), Apollo.VOID, 1)
@@ -179,21 +186,54 @@ func _draw_title(w: float, h: float) -> void:
 			Apollo.SLATE_L, Color(Apollo.VOID, 0.0), 1)
 
 
-func _volume_row(cx: float, y: float) -> void:
-	var label := "VOL"
+## Two lines now that SFX and music are separate buses. The selected one gets
+## the arrows and a lit label, so it is obvious which one left/right moves.
+## Labels are padded to the same width to keep both pip bars on one column.
+func _volume_row(cx: float, y: float, label: String, v: float, on: bool) -> void:
 	var pips := 10
-	var total := TinyFont.width(label, 1) + 6.0 + pips * 5.0 + 14.0
+	var total := TinyFont.width("MUSIC", 1) + 6.0 + pips * 5.0 + 14.0
 	var x := roundf(cx - total * 0.5)
-	TinyFont.draw_text(self, Vector2(x, y), "<", Apollo.SLATE_XL, 1)
+
+	var arrow: Color = Apollo.GOLD if on else Color(Apollo.SLATE, 0.0)
+	TinyFont.draw_text(self, Vector2(x, y), "<", arrow, 1)
 	x += 6.0
-	TinyFont.draw_text(self, Vector2(x, y), label, Apollo.SLATE_XL, 1)
-	x += TinyFont.width(label, 1) + 5.0
-	var filled := int(round(volume * pips))
+	TinyFont.draw_text(self, Vector2(x, y), label,
+		Apollo.WHITE if on else Apollo.SLATE_L, 1)
+	x += TinyFont.width("MUSIC", 1) + 5.0
+
+	var filled := int(round(v * pips))
 	for i in pips:
+		var lit: Color = Apollo.GEM if on else Apollo.SLATE_L
 		draw_rect(Rect2(x + i * 5, y, 3, 5),
-			Apollo.GEM if i < filled else Color(Apollo.SLATE, 0.8))
+			lit if i < filled else Color(Apollo.SLATE, 0.8))
 	x += pips * 5.0 + 3.0
-	TinyFont.draw_text(self, Vector2(x, y), ">", Apollo.SLATE_XL, 1)
+	TinyFont.draw_text(self, Vector2(x, y), ">", arrow, 1)
+
+
+## Pause. Deliberately plain: it is a stop, not a screen to look at.
+func _draw_pause(w: float, h: float) -> void:
+	draw_rect(Rect2(0, 0, w, h), Color(Apollo.VOID, 0.72))
+	var o := _panel(w, h, 150.0, 86.0)
+	var cx := w * 0.5
+	var y := o.y + 12.0
+
+	TinyFont.draw_centered(self, cx, y, "PAUSED", Apollo.GOLD, Apollo.BARK_XD, 3)
+	y += 24.0
+
+	const ITEMS := ["RESUME", "RESTART", "QUIT"]
+	for i in ITEMS.size():
+		var on: bool = i == pause_sel
+		if on:
+			TinyFont.draw_centered(self, cx, y, "> " + ITEMS[i] + " <",
+				Apollo.WHITE, Apollo.BARK_XD, 1)
+		else:
+			TinyFont.draw_centered(self, cx, y, ITEMS[i],
+				Apollo.SLATE_L, Color(Apollo.VOID, 0.0), 1)
+		y += 11.0
+
+	y += 4.0
+	TinyFont.draw_centered(self, cx, y, "ESC / START RESUMES",
+		Apollo.SLATE, Color(Apollo.VOID, 0.0), 1)
 
 
 func _draw_dead(w: float, h: float) -> void:

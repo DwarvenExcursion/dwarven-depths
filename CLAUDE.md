@@ -41,6 +41,7 @@ godot --headless --path . --quit-after 300              # compile + boot check
 godot --headless --path . --script res://tools/floodsim.gd   # flood tuning
 godot --path . --script res://tools/capture.gd               # screenshots
 godot --path . --script res://tools/updateshot.gd            # update panel shots
+godot --path . --script res://tools/falltest.gd              # fall physics + phase 1 shots
 ```
 
 ## Releasing

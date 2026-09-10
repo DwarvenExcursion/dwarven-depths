@@ -9,6 +9,17 @@ Ordered. The ordering matters more than the contents.
 
 ## 1. Play it
 
+**The dwarf now falls** (2026-09-09). That is the single biggest change to how
+the game feels since the flood rewrite, and it is tuned against a harness on a
+keyboard — the numbers are in [[2026-09-09 Phase 1 — falling, pause, audio
+buses]]. Twenty runs, then decide whether `GRAVITY`, `FALL_MAX`, `AIR_DRIFT`
+and the stun constants are right.
+
+One consequence to form an opinion on: with gravity, digging upward no longer
+holds you up. You carve the tile above, step into it, and fall straight back
+down. Climbing is now a staircase job. That may be correct for a game about
+descending, or it may need a ledge-grab.
+
 Nothing below is worth doing before you have played twenty runs of what is
 there now. The [[The Flood|flood]] was rewritten from a rising line into a real
 simulation on 2026-09-09; it is tuned against a harness, not against a human.
@@ -40,7 +51,9 @@ version and **that invalidates a lot of the work below**. Check it early.
 
 ## 4. Polish that is cheap and clearly good
 
-- Separate SFX bus, so the volume control does not dim future music.
+- ~~Separate SFX bus~~ — done 2026-09-09. SFX and Music are separate buses with
+  separate sliders. The music player is wired but **there is no track**; drop
+  an `.ogg` at `res://audio/music/theme.ogg` and it loops automatically.
 - Water sound — a loop whose volume tracks how close the wet front is. The
   flood is now a physical thing and it should be audible.
 - A "you were N rows from your best" line on the death screen.

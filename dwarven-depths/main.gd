@@ -20,7 +20,26 @@ const SETTINGS_PATH := "user://settings.cfg"
 const SWING_TIME := 0.09       # how long the dig animation frame holds
 const DANGER_ROWS := 9.0       # distance at which the HUD starts warning
 
-enum State { TITLE, PLAY, DEAD }
+const MUSIC_PATH := "res://audio/music/theme.ogg"
+
+# --- Falling ------------------------------------------------------
+#
+# A fall resolves over several ticks instead of in one frame, so a long drop
+# reads as a drop rather than a teleport. Everything here is rows and seconds.
+#
+# This is also what defines "a tick" for anything that moves: one row of fall
+# at FALL_MAX is 1/15 s, and MOVE_DELAY is 0.11 s, so terminal velocity is
+# roughly 1.6x a walking step. Fast enough to feel like gravity, slow enough
+# to read on a 3.5" screen.
+const GRAVITY      := 26.0     # rows per second squared
+const FALL_START   := 4.0      # speed a fall begins at, rows per second
+const FALL_MAX     := 15.0     # terminal speed
+const AIR_DRIFT    := 0.40     # seconds between steerable sideways steps
+const STUN_FREE    := 3        # rows you may drop before any stun at all
+const STUN_PER_ROW := 0.022
+const STUN_MAX     := 0.45
+
+enum State { TITLE, PLAY, DEAD, PAUSE }
 
 var state := State.TITLE
 var mine := Mine.new()
@@ -30,7 +49,10 @@ var player := Vector2i(10, 2)
 var gems := 0
 var deepest := 0
 var best := 0
-var volume := 0.7
+
+var vol_sfx := 0.7
+var vol_music := 0.7
+var vol_sel := 0               # which title-screen volume line is selected
 
 var move_cd := 0.0
 var last_dir := Vector2i(0, 1)
@@ -38,6 +60,15 @@ var facing := 1
 var swing := 0.0
 var shake := 0.0
 var band := ""
+
+var falling := false
+var fall_v := 0.0
+var fall_acc := 0.0            # whole rows owed, carried between frames
+var fall_from := 0             # row the current fall started at
+var drift_cd := 0.0
+var stun := 0.0
+
+var pause_sel := 0
 
 var bits: Array[Dictionary] = []   # dig debris
 
@@ -48,11 +79,13 @@ var bits: Array[Dictionary] = []   # dig debris
 @onready var sfx_gem: AudioStreamPlayer = $SfxGem
 @onready var sfx_blast: AudioStreamPlayer = $SfxBlast
 @onready var sfx_death: AudioStreamPlayer = $SfxDeath
+@onready var music: AudioStreamPlayer = $Music
 
 
 func _ready() -> void:
 	load_settings()
 	apply_volume()
+	_start_music()
 	get_viewport().size_changed.connect(fit_camera)
 	fit_camera()
 	mine.generate_to(VIEW_ROWS + Flood.WINDOW_DOWN)
@@ -93,15 +126,48 @@ func view_rect() -> Rect2:
 # --- Settings -----------------------------------------------------
 
 func apply_volume() -> void:
-	var bus := AudioServer.get_bus_index("Master")
+	_set_bus("SFX", vol_sfx)
+	_set_bus("Music", vol_music)
+
+
+func _set_bus(bus_name: String, v: float) -> void:
+	var bus := AudioServer.get_bus_index(bus_name)
+	if bus < 0:
+		# No bus layout. Better to leave the mixer alone than to silently
+		# reach for Master and dim everything again.
+		return
 	# linear_to_db(0) is -inf, which misbehaves; mute instead.
-	AudioServer.set_bus_mute(bus, volume <= 0.001)
-	AudioServer.set_bus_volume_db(bus, linear_to_db(maxf(volume, 0.001)))
+	AudioServer.set_bus_mute(bus, v <= 0.001)
+	AudioServer.set_bus_volume_db(bus, linear_to_db(maxf(v, 0.001)))
+
+
+func _bump_volume(d: float) -> void:
+	if vol_sel == 0:
+		vol_sfx = clampf(vol_sfx + d, 0.0, 1.0)
+	else:
+		vol_music = clampf(vol_music + d, 0.0, 1.0)
+
+
+## Point the music player at the track, if there is one. There deliberately is
+## not: nothing here generates or ships audio of unclear provenance. A missing
+## file has to be silent and uneventful, not an error every frame.
+func _start_music() -> void:
+	if not ResourceLoader.exists(MUSIC_PATH):
+		return
+	var stream := load(MUSIC_PATH)
+	if stream == null or not (stream is AudioStream):
+		return
+	# Only some stream types expose `loop`; setting it blind would throw.
+	if "loop" in stream:
+		stream.set("loop", true)
+	music.stream = stream
+	music.play()
 
 
 func save_settings() -> void:
 	var cfg := ConfigFile.new()
-	cfg.set_value("audio", "volume", volume)
+	cfg.set_value("audio", "sfx", vol_sfx)
+	cfg.set_value("audio", "music", vol_music)
 	cfg.set_value("run", "best", best)
 	var err := cfg.save(SETTINGS_PATH)
 	if err != OK:
@@ -110,9 +176,15 @@ func save_settings() -> void:
 
 func load_settings() -> void:
 	var cfg := ConfigFile.new()
-	if cfg.load(SETTINGS_PATH) == OK:
-		volume = clampf(cfg.get_value("audio", "volume", 0.7), 0.0, 1.0)
-		best = cfg.get_value("run", "best", 0)
+	if cfg.load(SETTINGS_PATH) != OK:
+		return
+	# Configs written before the bus split hold a single "volume" key. Use it
+	# as the default for both, so an existing player keeps the level they set
+	# rather than being reset to 0.7.
+	var legacy: float = clampf(cfg.get_value("audio", "volume", 0.7), 0.0, 1.0)
+	vol_sfx = clampf(cfg.get_value("audio", "sfx", legacy), 0.0, 1.0)
+	vol_music = clampf(cfg.get_value("audio", "music", legacy), 0.0, 1.0)
+	best = cfg.get_value("run", "best", 0)
 
 
 # --- Drawing ------------------------------------------------------
@@ -224,8 +296,8 @@ func _draw_water(p: Vector2i, px: int, py: int) -> void:
 # --- Actions ------------------------------------------------------
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("quit_game"):
-		get_tree().quit()
+	# quit_game is state-dependent now -- it pauses during a run and only quits
+	# outright from the title or the death screen, so it is handled per state.
 	if event.is_action_pressed("dig"):
 		blast()
 
@@ -269,13 +341,92 @@ func try_move(dir: Vector2i) -> void:
 
 	mine.carve(target)
 	player = target
-	if player.y > deepest:
-		deepest = player.y
-		var band_name: String = Apollo.stratum(deepest)["name"]
-		if band_name != band:
-			band = band_name
-			hud.announce(band_name)
+	_note_depth()
 	queue_redraw()
+
+
+## deepest, and the stratum banner that follows from it. try_move() used to own
+## this outright; the fall path has to record depth too, or the flood leash
+## reads a stale row all the way down a shaft.
+func _note_depth() -> void:
+	if player.y <= deepest:
+		return
+	deepest = player.y
+	var band_name: String = Apollo.stratum(deepest)["name"]
+	if band_name != band:
+		band = band_name
+		hud.announce(band_name)
+
+
+## Move into a tile that is already open, without digging. Falling and air
+## drift both go through here; try_move() is for deliberate digging.
+func _slide_to(target: Vector2i) -> bool:
+	if not mine.in_bounds_x(target.x) or target.y < 0:
+		return false
+	mine.generate_to(target.y + VIEW_ROWS + Flood.WINDOW_DOWN)
+	if not mine.is_open(target):
+		return false
+	player = target
+	_note_depth()
+	return true
+
+
+## Nothing solid under the dwarf.
+func _unsupported() -> bool:
+	var below := player + Vector2i(0, 1)
+	mine.generate_to(below.y + VIEW_ROWS + Flood.WINDOW_DOWN)
+	return mine.is_open(below)
+
+
+func _step_fall(delta: float) -> void:
+	if not falling:
+		if _unsupported():
+			falling = true
+			fall_v = FALL_START
+			fall_acc = 0.0
+			fall_from = player.y
+			# Charge the first drift too, or stepping off a ledge grants a free
+			# sideways move and short hops become steerable in a way long falls
+			# are not.
+			drift_cd = AIR_DRIFT
+		return
+
+	fall_v = minf(fall_v + GRAVITY * delta, FALL_MAX)
+	fall_acc += fall_v * delta
+
+	# Air control. Steerable, but a column at a time -- enough to pick which
+	# side of a pillar you land on, not enough to fly.
+	drift_cd -= delta
+	if drift_cd <= 0.0:
+		var dx := 0
+		if Input.is_action_pressed("move_left"):
+			dx = -1
+		elif Input.is_action_pressed("move_right"):
+			dx = 1
+		if dx != 0 and _slide_to(player + Vector2i(dx, 0)):
+			facing = dx
+			last_dir = Vector2i(dx, 0)
+			drift_cd = AIR_DRIFT
+
+	while fall_acc >= 1.0:
+		fall_acc -= 1.0
+		if not _slide_to(player + Vector2i(0, 1)):
+			_land()
+			return
+
+	# Drifting sideways can put ground under you between steps.
+	if not _unsupported():
+		_land()
+
+
+func _land() -> void:
+	var dropped: int = player.y - fall_from
+	falling = false
+	fall_v = 0.0
+	fall_acc = 0.0
+	if dropped > STUN_FREE:
+		stun = minf(float(dropped - STUN_FREE) * STUN_PER_ROW, STUN_MAX)
+		shake = maxf(shake, minf(float(dropped) * 0.25, 4.0))
 
 
 func blast() -> void:
@@ -327,18 +478,35 @@ func _process(delta: float) -> void:
 			queue_redraw()
 			if Input.is_action_just_pressed("start_game"):
 				restart()
+			elif Input.is_action_just_pressed("quit_game"):
+				get_tree().quit()
+			return
+		State.PAUSE:
+			_pause_step()
 			return
 
-	move_cd -= delta
-	if move_cd <= 0.0:
-		var dir := Vector2i.ZERO
-		if Input.is_action_pressed("move_left"):    dir = Vector2i(-1, 0)
-		elif Input.is_action_pressed("move_right"): dir = Vector2i(1, 0)
-		elif Input.is_action_pressed("move_up"):    dir = Vector2i(0, -1)
-		elif Input.is_action_pressed("move_down"):  dir = Vector2i(0, 1)
-		if dir != Vector2i.ZERO:
-			try_move(dir)
-			move_cd = MOVE_DELAY
+	# Pausing has to come before anything is simulated, so the flood does not
+	# advance on the frame the menu opens.
+	if Input.is_action_just_pressed("quit_game") or Input.is_action_just_pressed("start_game"):
+		_pause()
+		return
+
+	stun = maxf(0.0, stun - delta)
+	_step_fall(delta)
+
+	# Falling owns the dwarf: no digging in mid-air, and no input at all while
+	# the landing stun runs.
+	if not falling and stun <= 0.0:
+		move_cd -= delta
+		if move_cd <= 0.0:
+			var dir := Vector2i.ZERO
+			if Input.is_action_pressed("move_left"):    dir = Vector2i(-1, 0)
+			elif Input.is_action_pressed("move_right"): dir = Vector2i(1, 0)
+			elif Input.is_action_pressed("move_up"):    dir = Vector2i(0, -1)
+			elif Input.is_action_pressed("move_down"):  dir = Vector2i(0, 1)
+			if dir != Vector2i.ZERO:
+				try_move(dir)
+				move_cd = MOVE_DELAY
 
 	swing = maxf(0.0, swing - delta)
 	flood.step(mine, player.y, delta)
@@ -359,6 +527,46 @@ func _process(delta: float) -> void:
 	queue_redraw()
 
 
+## Pause is a state branch rather than get_tree().paused. The game is already a
+## single _process loop driven by this enum, so a branch keeps the whole thing
+## in one place -- and it means the flood, generation and timers stop because
+## they are simply never reached, not because a process mode was set.
+func _pause() -> void:
+	state = State.PAUSE
+	pause_sel = 0
+	shake = 0.0
+	cam.offset = Vector2.ZERO
+	hud.mode = hud.Mode.PAUSE
+	hud.pause_sel = pause_sel
+	queue_redraw()
+
+
+func _resume() -> void:
+	state = State.PLAY
+	hud.mode = hud.Mode.PLAY
+	# Falls survive a pause: fall_v and fall_acc are untouched, so resuming
+	# continues the drop from exactly where it stopped.
+	queue_redraw()
+
+
+func _pause_step() -> void:
+	queue_redraw()
+
+	if Input.is_action_just_pressed("move_up"):
+		pause_sel = wrapi(pause_sel - 1, 0, 3)
+		hud.pause_sel = pause_sel
+	elif Input.is_action_just_pressed("move_down"):
+		pause_sel = wrapi(pause_sel + 1, 0, 3)
+		hud.pause_sel = pause_sel
+	elif Input.is_action_just_pressed("quit_game"):
+		_resume()
+	elif Input.is_action_just_pressed("start_game") or Input.is_action_just_pressed("dig"):
+		match pause_sel:
+			0: _resume()
+			1: restart()
+			2: get_tree().quit()
+
+
 func _title_step() -> void:
 	# 0.5 puts the top of the view exactly on row 0, so no part of the title
 	# screen looks at empty space above the world.
@@ -369,21 +577,32 @@ func _title_step() -> void:
 	# frame drew, and the world below the fold is simply never painted.
 	queue_redraw()
 
+	# Up/down picks a line, left/right moves it.
+	if Input.is_action_just_pressed("move_up"):
+		vol_sel = 0
+		push_hud()
+	elif Input.is_action_just_pressed("move_down"):
+		vol_sel = 1
+		push_hud()
+
 	var changed := false
 	if Input.is_action_just_pressed("move_left"):
-		volume = maxf(0.0, volume - VOL_STEP)
+		_bump_volume(-VOL_STEP)
 		changed = true
 	elif Input.is_action_just_pressed("move_right"):
-		volume = minf(1.0, volume + VOL_STEP)
+		_bump_volume(VOL_STEP)
 		changed = true
 	if changed:
 		apply_volume()
 		save_settings()
-		sfx_gem.play()   # doubles as a preview of the new level
+		if vol_sel == 0:
+			sfx_gem.play()   # doubles as a preview of the new level
 		push_hud()
 
 	if Input.is_action_just_pressed("start_game"):
 		restart()
+	elif Input.is_action_just_pressed("quit_game"):
+		get_tree().quit()
 
 
 func _step_bits(delta: float) -> void:
@@ -404,7 +623,9 @@ func push_hud() -> void:
 	hud.best = best
 	hud.gems = gems
 	hud.bomb_cost = BOMB_COST
-	hud.volume = volume
+	hud.vol_sfx = vol_sfx
+	hud.vol_music = vol_music
+	hud.vol_sel = vol_sel
 	hud.stratum_name = band
 	if state == State.PLAY:
 		# The lethal front only exists once water pools on you, which is too
@@ -425,6 +646,12 @@ func restart() -> void:
 	facing = 1
 	swing = 0.0
 	shake = 0.0
+	falling = false
+	fall_v = 0.0
+	fall_acc = 0.0
+	fall_from = 0
+	drift_cd = 0.0
+	stun = 0.0
 	band = Apollo.stratum(0)["name"]
 	state = State.PLAY
 	hud.mode = hud.Mode.PLAY
