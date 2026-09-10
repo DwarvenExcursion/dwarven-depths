@@ -47,6 +47,11 @@ func generate_to(row: int) -> void:
 				t = STONE
 			elif generated_to < SKY_ROWS:
 				t = EMPTY          # open sky, and the flood's inlet
+			elif randf() < st["cave"]:
+				# Rock that has already broken. Rolled before stone so the
+				# deep tiers stay passable: they are the hardest to cut and
+				# also the most likely to be open somewhere.
+				t = EMPTY
 			elif randf() < st["stone"]:
 				t = STONE
 			elif randf() < st["gem"]:
