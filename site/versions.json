@@ -16,11 +16,11 @@
                                   "windows":  {
                                                   "url":  "https://github.com/DwarvenExcursion/dwarven-depths/releases/download/v0.1.1/DwarvenDepths0.1.1setup.exe",
                                                   "size":  28215896,
-                                                  "sha256":  "248ed605220124d98d582abe3659eceaba60a2f63a988356bdcce2520a872ef4",
+                                                  "sha256":  "f4cf06b0dc6e28b8468fbe2901549a123a2872c4293b629720499082c4605089",
                                                   "installerArgs":  "/SILENT /NORESTART /CLOSEAPPLICATIONS"
                                               },
                                   "linux":  {
-                                                "url":  "https://github.com/DwarvenExcursion/dwarven-depths/releases/download/v0.1.1/DwarvenDepths-0.1.1-linux-x86_64.tar.gz",
+                                                "url":  "https://github.com/DwarvenExcursion/dwarven-depths/releases/download/v0.1.1/DwarvenDepths0.1.1linuxx86_64.tar.gz",
                                                 "size":  28508648,
                                                 "sha256":  "83cc28b6f380677455ca26f33c7c912ef46b7d635810a08e4c8c094c73ff43e8"
                                             }

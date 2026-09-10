@@ -1,3 +1,14 @@
 # Built installers. Regenerate with ci/release.ps1; the shipped copy lives on
 # the GitHub Release, not in git.
 /dist/
+
+# Design documentation and working notes. This repo is public and the Obsidian
+# vault is not meant to be. NOTES.md is deliberately NOT here: its bullets ship
+# publicly anyway, as the release notes and the patch notes on the game page.
+#
+# Ignoring a file does not remove it from history. Everything below was pushed
+# before this rule existed and is still readable at earlier commits.
+/docs/
+/CLAUDE.md
+/DESIGN.md
+/dwarven-depths/scripts/HANDOFF.md
