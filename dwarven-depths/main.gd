@@ -171,11 +171,12 @@ func _start_music() -> void:
 		if stream == null or not (stream is AudioStream):
 			push_warning("music at %s is not an AudioStream" % path)
 			continue
-		# Only some stream types expose `loop`; setting it blind would throw.
-		# WAV uses a loop *mode* enum rather than a bool.
-		if stream is AudioStreamWAV:
-			stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
-		elif "loop" in stream:
+		# Looping is set at import time for WAV (edit/loop_mode=1) and must NOT
+		# be forced here: an imported sample carries loop_end = 0, so setting
+		# LOOP_FORWARD at runtime builds a zero-length loop and the player
+		# stops on the first frame while still reporting that it started.
+		# Compressed streams do use a plain bool, and have no such trap.
+		if not (stream is AudioStreamWAV) and "loop" in stream:
 			stream.set("loop", true)
 		music.stream = stream
 		music.play()
