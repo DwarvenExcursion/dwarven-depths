@@ -4,29 +4,40 @@
     "title":  "Dwarven Depths",
     "page":  "https://dwarvenengineering.com/dwarven-depths",
     "latest":  {
-                   "version":  "0.1.1",
-                   "released":  "2026-09-09",
+                   "version":  "0.2.0",
+                   "released":  "2026-09-28",
                    "mandatory":  false,
                    "notes":  [
-                                 "The 0.1.0 download was built from a stale export and shipped without the fixes. This is the build that actually has them.",
-                                 "The game checks for its own updates on launch, and can install them itself on Windows.",
-                                 "Added a Linux x86_64 build."
+                                 "The dwarf falls now. A long drop is a real fall you can steer a little, and landing hard leaves you stunned for a moment.",
+                                 "Goblins have moved into the deep caves. They block the way, go down in one hit, and take a gem off you if they reach you first.",
+                                 "The mine runs to depth 5000 through seventeen bands of rock, each with its own colour, and real caverns that get bigger the deeper you go.",
+                                 "Added a pause menu.",
+                                 "Added music, and separate volume sliders for music and sound effects."
                              ],
                    "builds":  {
                                   "windows":  {
-                                                  "url":  "https://github.com/DwarvenExcursion/dwarven-depths/releases/download/v0.1.1/DwarvenDepths0.1.1setup.exe",
-                                                  "size":  28215896,
-                                                  "sha256":  "f4cf06b0dc6e28b8468fbe2901549a123a2872c4293b629720499082c4605089",
+                                                  "url":  "https://github.com/DwarvenExcursion/dwarven-depths/releases/download/v0.2.0/DwarvenDepths-0.2.0-setup.exe",
+                                                  "size":  28328424,
+                                                  "sha256":  "78aa3a0b39754889e3c594a961a4fb04067c52e0a4d99e95a6ed79f1c379c568",
                                                   "installerArgs":  "/SILENT /NORESTART /CLOSEAPPLICATIONS"
                                               },
                                   "linux":  {
-                                                "url":  "https://github.com/DwarvenExcursion/dwarven-depths/releases/download/v0.1.1/DwarvenDepths0.1.1linuxx86_64.tar.gz",
-                                                "size":  28508648,
-                                                "sha256":  "83cc28b6f380677455ca26f33c7c912ef46b7d635810a08e4c8c094c73ff43e8"
+                                                "url":  "https://github.com/DwarvenExcursion/dwarven-depths/releases/download/v0.2.0/DwarvenDepths-0.2.0-linux-x86_64.tar.gz",
+                                                "size":  28630715,
+                                                "sha256":  "5a134e46fa16ddc824e5ff7827d07c86aa8b6c2ed4735798eba24a13480a5aff"
                                             }
                               }
                },
     "history":  [
+                    {
+                        "version":  "0.1.1",
+                        "released":  "2026-09-09",
+                        "notes":  [
+                                      "The 0.1.0 download was built from a stale export and shipped without the fixes. This is the build that actually has them.",
+                                      "The game checks for its own updates on launch, and can install them itself on Windows.",
+                                      "Added a Linux x86_64 build."
+                                  ]
+                    },
                     {
                         "version":  "0.1.0",
                         "released":  "2026-09-09",
